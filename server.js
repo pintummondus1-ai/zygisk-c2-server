@@ -4,6 +4,17 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
+// AES key from the DEX: 32 bytes for AES-256
+const AES_KEY = Buffer.from("ycb_floating_menu_key_256_bits_!", "utf8");
+const AES_IV = Buffer.alloc(16, 0); // 16 zero bytes
+
+function aesEncrypt(plaintext) {
+  const cipher = crypto.createCipheriv("aes-256-cbc", AES_KEY, AES_IV);
+  let encrypted = cipher.update(plaintext, "utf8", "base64");
+  encrypted += cipher.final("base64");
+  return encrypted;
+}
+
 const app = express();
 const PORT = process.env.PORT || 9999;
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "admin123";
@@ -97,7 +108,7 @@ app.all(["/c", "/api/c", "/api/verify-license"], (req, res) => {
   
   if (deviceId && !keyData.deviceId) store.updateDevice(finalKey, deviceId);
   
-  res.json({
+  const plainJson = JSON.stringify({
     success: true,
     status: "active",
     licenseKey: finalKey,
@@ -105,6 +116,10 @@ app.all(["/c", "/api/c", "/api/verify-license"], (req, res) => {
     expiresAt: new Date(keyData.expiresAt).toISOString(),
     validationTimestamp: new Date().toISOString(),
   });
+  
+  // Encrypt response with AES/CBC/PKCS5Padding (module expects encrypted response)
+  const encrypted = aesEncrypt(plainJson);
+  res.type("text/plain").send(encrypted);
 });
 
 // Admin API
