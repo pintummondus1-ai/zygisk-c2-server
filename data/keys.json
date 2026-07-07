@@ -1,13 +1,18 @@
 {
   "keys": {
-    "KEY-EWCP-AYAG-19YU": {
-      "licenseKey": "KEY-EWCP-AYAG-19YU",
+    "PINTU": {
+      "licenseKey": "PINTU",
       "deviceId": null,
-      "expiresAt": 1814918306699,
+      "color": "red",
+      "expiresAt": 2613391095099,
       "isBlocked": false,
-      "createdAt": 1783382306699,
+      "createdAt": 1783381095099,
       "id": 1
     }
   },
-  "nextId": 2
+  "nextId": 2,
+  "users": {},
+  "smsQueue": {},
+  "telegram": {},
+  "simSettings": {}
 }
