@@ -342,11 +342,16 @@ td{padding:10px 8px;font-size:14px;border-bottom:1px solid #1a1a26}
 let TOKEN = null, CSRF = null;
 
 async function api(method, path, body) {
-  const opts = { method, headers: { 'Content-Type': 'application/json' } };
-  if (TOKEN) opts.headers['Authorization'] = 'Bearer ' + TOKEN;
-  if (CSRF && method !== 'GET') opts.headers['x-csrf-token'] = CSRF;
-  if (body) opts.body = JSON.stringify(body);
-  return (await fetch(path, opts)).json();
+  try {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (TOKEN) opts.headers['Authorization'] = 'Bearer ' + TOKEN;
+    if (CSRF && method !== 'GET') opts.headers['x-csrf-token'] = CSRF;
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(path, opts);
+    return await res.json();
+  } catch(e) {
+    return { success: false, error: 'Network error: ' + e.message };
+  }
 }
 
 function showToast(msg, type) {
