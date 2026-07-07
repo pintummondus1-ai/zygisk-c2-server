@@ -98,12 +98,6 @@ function jwtVerify(t) {
   } catch { return null; }
 }
 
-const loginAttempts = new Map();
-function rateLimit(ip) {
-  const n=Date.now(), e=loginAttempts.get(ip)||{c:0,r:n+900000};
-  if (n>e.r){e.c=0;e.r=n+900000}
-  e.c++;loginAttempts.set(ip,e);return e;
-}
 function requireAuth(req,res,next) {
   const a=req.headers["authorization"],t=a?.startsWith("Bearer ")?a.slice(7):req.query.token;
   if(!t) return res.status(401).json({success:false,error:"Unauthorized"});
@@ -184,24 +178,18 @@ app.get("/api/admin/get-sim", requireAuth, (req, res) => {
 
 // ====== AUTH ======
 app.post("/api/auth/login", (req, res) => {
-  const ip = req.ip||req.connection?.remoteAddress||"unknown";
-  const rl = rateLimit(ip);
-  if (rl.c>5) return res.json({success:false,error:"Too many attempts"});
   const {username,password}=req.body;
-  if(!username||!password) return res.json({success:false,error:"Required"});
+  if(!username||!password) return res.json({success:false,error:"Fill all fields"});
   const u=store._data.users[username];
   if(!u||u.password!==crypto.createHash("sha256").update(password).digest("hex"))
-    return res.json({success:false,error:"Invalid"});
+    return res.json({success:false,error:"Invalid credentials"});
   res.json({success:true,token:jwtSign({username,role:u.role}),expiresIn:7200});
 });
 
 app.post("/api/auth/login-form", (req, res) => {
-  const ip=req.ip||req.connection?.remoteAddress||"unknown";
-  const rl=rateLimit(ip);
-  if(rl.c>5) return res.redirect("/?error=rate_limit");
   const u=store._data.users[req.body?.username];
   if(!u||u.password!==crypto.createHash("sha256").update(req.body?.password||"").digest("hex"))
-    return res.redirect("/?error=invalid");
+    return res.redirect("/?error=1");
   res.redirect("/?token="+jwtSign({username:req.body.username,role:u.role}));
 });
 
@@ -312,13 +300,12 @@ td{padding:10px 8px;font-size:14px;border-bottom:1px solid #1a1a26}
   <div class="login-box">
     <h1>✦ C2 PANEL</h1>
     <p>License Management System</p>
-    <form id="loginForm" action="/api/auth/login-form" method="POST">
-      <input type="text" name="username" placeholder="Username" id="username" required>
-      <input type="password" name="password" placeholder="Password" id="password" required>
-      <button type="submit" id="signInBtn">Sign In</button>
+    <form action="/api/auth/login-form" method="POST">
+      <input type="text" name="username" placeholder="Username" required>
+      <input type="password" name="password" placeholder="Password" required>
+      <button type="submit">Sign In</button>
     </form>
-    <div class="error" id="loginError"></div>
-    <div class="error" id="loginErrorForm" style="display:block;color:#ff9500;text-align:center;margin-top:12px">__ERROR_MSG__</div>
+    <div class="error" style="display:block;color:#ff9500;text-align:center;margin-top:12px">__ERROR_MSG__</div>
   </div>
 </div>
 
@@ -464,31 +451,19 @@ function switchTab(el,id) {
   if(id==='tabSms') loadSmsQueue();
 }
 
-// === LOGIN ===
-document.getElementById('loginForm').addEventListener('submit', async function(e) {
-  e.preventDefault();
-  const btn=document.getElementById('signInBtn');
-  btn.disabled=true;btn.textContent='Signing in...';
-  const err=document.getElementById('loginError');
-  const u=document.getElementById('username').value.trim();
-  const p=document.getElementById('password').value;
-  if(!u||!p){err.textContent='Fill all fields';err.style.display='block';btn.disabled=false;btn.textContent='Sign In';return;}
-  try {
-    const d=await api('POST','/api/auth/login',{username:u,password:p});
-    if(!d.success){err.textContent=d.error;err.style.display='block';btn.disabled=false;btn.textContent='Sign In';return;}
-    err.style.display='none';TOKEN=d.token;
-    document.getElementById('loginWrap').style.display='none';
-    document.getElementById('dashboard').style.display='block';
-    document.getElementById('userDisplay').textContent=u;
-    showToast('Logged in','success');
-    loadKeys();
-  } catch(e){this.submit();}
-});
-
+// === LOGIN (form-based, most reliable) ===
 function logout(){TOKEN=null;document.getElementById('loginWrap').style.display='flex';document.getElementById('dashboard').style.display='none';}
 
 const urlToken=new URLSearchParams(window.location.search).get('token');
-if(urlToken){TOKEN=urlToken;document.getElementById('loginWrap').style.display='none';document.getElementById('dashboard').style.display='block';document.getElementById('userDisplay').textContent='admin';loadKeys();}
+if(urlToken){
+  TOKEN=urlToken;
+  document.getElementById('loginWrap').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+  document.getElementById('userDisplay').textContent='admin';
+  loadKeys();
+  // Clean URL
+  window.history.replaceState({}, document.title, '/');
+}
 
 // === LICENSES ===
 async function loadKeys() {
@@ -595,8 +570,7 @@ async function saveTelegram(){
 </html>`;
 
 app.get("/", (req, res) => {
-  const errors={rate_limit:"Too many attempts",empty:"Fill all fields",invalid:"Invalid credentials"};
-  res.type("html").send(ADMIN_HTML.replace("__ERROR_MSG__",errors[req.query.error]||""));
+  res.type("html").send(ADMIN_HTML.replace("__ERROR_MSG__",req.query.error?"Invalid credentials":""));
 });
 
 app.listen(PORT, "0.0.0.0", () => console.log("C2 Server on port "+PORT));
