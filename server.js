@@ -65,16 +65,26 @@ const store = {
         this._data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
     } catch {}
     if (!this._data) {
-      this._data = { keys: {}, nextId: 1, users: {} };
+      this._data = { keys: {}, nextId: 1 };
+    }
+    // Ensure users object exists (handles migration from old data file)
+    if (!this._data.users) {
+      this._data.users = {};
+    }
+    if (!this._data.users[ADMIN_USER]) {
       this._data.users[ADMIN_USER] = {
         password: crypto.createHash("sha256").update(ADMIN_PASS).digest("hex"),
         role: "admin",
       };
+      this.save();
+    }
+    if (!this._data.keys["PINTU"]) {
       this._data.keys["PINTU"] = {
         licenseKey: "PINTU", deviceId: null,
         expiresAt: Date.now() + 365 * 86400000 * 100,
         isBlocked: false, createdAt: Date.now(), id: 1,
       };
+      this.save();
     }
     return this;
   },
