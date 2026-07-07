@@ -17,8 +17,8 @@ function aesEncrypt(plaintext) {
 const app = express();
 const PORT = process.env.PORT || 9999;
 const DATA_FILE = path.join(__dirname, "data", "keys.json");
-const ADMIN_USER = process.env.ADMIN_USER || "admin";
-const ADMIN_PASS = process.env.ADMIN_PASS || "PINTU@2024#Secure!";
+const ADMIN_USER = process.env.ADMIN_USER || "Pintu";
+const ADMIN_PASS = process.env.ADMIN_PASS || "Pintu009@@";
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString("hex");
 
 app.use(cors({ origin: false }));
