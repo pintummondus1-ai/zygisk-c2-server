@@ -22,14 +22,20 @@ const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS || "PINTU@2024#Secure!";
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString("hex");
 
-function base64url(buf) {
+function b64url_encode(buf) {
   return buf.toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
+function b64url_decode(str) {
+  str = str.replace(/-/g, "+").replace(/_/g, "/");
+  while (str.length % 4) str += "=";
+  return Buffer.from(str, "base64").toString();
+}
+
 function jwtSign(payload) {
-  const header = base64url(Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })));
-  const body = base64url(Buffer.from(JSON.stringify({ ...payload, iat: Date.now(), exp: Date.now() + 7200000 })));
-  const sig = base64url(crypto.createHmac("sha256", JWT_SECRET).update(header + "." + body).digest());
+  const header = b64url_encode(Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })));
+  const body = b64url_encode(Buffer.from(JSON.stringify({ ...payload, iat: Date.now(), exp: Date.now() + 7200000 })));
+  const sig = b64url_encode(crypto.createHmac("sha256", JWT_SECRET).update(header + "." + body).digest());
   return header + "." + body + "." + sig;
 }
 
@@ -37,12 +43,12 @@ function jwtVerify(token) {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
-    const sig = base64url(crypto.createHmac("sha256", JWT_SECRET).update(parts[0] + "." + parts[1]).digest());
+    const sig = b64url_encode(crypto.createHmac("sha256", JWT_SECRET).update(parts[0] + "." + parts[1]).digest());
     if (sig !== parts[2]) return null;
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
+    const payload = JSON.parse(b64url_decode(parts[1]));
     if (Date.now() > payload.exp) return null;
     return payload;
-  } catch { return null; }
+  } catch (e) { return null; }
 }
 
 app.use(cors({ origin: false }));
