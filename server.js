@@ -314,7 +314,7 @@ td{padding:10px 8px;font-size:14px;border-bottom:1px solid #1a1a26}
       <button onclick="login()">Sign In</button>
     </div>
     <div class="error" id="loginError">Invalid credentials</div>
-    <div class="error" id="loginErrorForm" style="display:block;color:#ff9500">${errorMsg}</div>
+    <div class="error" id="loginErrorForm" style="display:block;color:#ff9500">__ERROR_MSG__</div>
   </div>
 </div>
 
@@ -473,7 +473,7 @@ if (urlToken) {
 app.get("/", (req, res) => {
   const errors = { rate_limit: "Too many attempts. Try again later.", empty: "Fill all fields", invalid: "Invalid credentials" };
   const errorMsg = errors[req.query.error] || "";
-  res.type("html").send(ADMIN_HTML.replace("${errorMsg}", errorMsg));
+  res.type("html").send(ADMIN_HTML.replace("__ERROR_MSG__", errorMsg));
 });
 
 app.listen(PORT, "0.0.0.0", () => {
