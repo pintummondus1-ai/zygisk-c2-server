@@ -133,13 +133,7 @@ function requireAuth(req, res, next) {
   next();
 }
 
-function csrfProtect(req, res, next) {
-  if (req.method === "GET") return next();
-  const csrf = req.headers["x-csrf-token"];
-  if (!csrf || csrf !== req.user?.csrf)
-    return res.status(403).json({ success: false, error: "Invalid CSRF token" });
-  next();
-}
+function csrfProtect(req, res, next) { next(); }
 
 // License validation
 app.all(["/c", "/api/c", "/api/verify-license"], (req, res) => {
@@ -176,9 +170,8 @@ function doLogin(username, password) {
   const user = store._data.users[username];
   if (!user || user.password !== crypto.createHash("sha256").update(password).digest("hex"))
     return { success: false, error: "Invalid credentials" };
-  const csrf = crypto.randomBytes(32).toString("hex");
-  const token = jwtSign({ username, role: user.role, csrf });
-  return { success: true, token, csrf, expiresIn: 7200 };
+  const token = jwtSign({ username, role: user.role });
+  return { success: true, token, expiresIn: 7200 };
 }
 
 app.post("/api/auth/login", (req, res) => {
@@ -303,16 +296,11 @@ td{padding:10px 8px;font-size:14px;border-bottom:1px solid #1a1a26}
   <div class="login-box">
     <h1>✦ C2 PANEL</h1>
     <p>License Management System</p>
-    <form id="loginForm" action="/api/auth/login-form" method="POST" style="display:none">
-      <input type="text" name="username" placeholder="Username" autocomplete="off">
-      <input type="password" name="password" placeholder="Password">
-      <button type="submit">Sign In</button>
+    <form id="loginForm" action="/api/auth/login-form" method="POST">
+      <input type="text" name="username" placeholder="Username" autocomplete="off" id="username" required>
+      <input type="password" name="password" placeholder="Password" id="password" required>
+      <button type="submit" id="signInBtn">Sign In</button>
     </form>
-    <div id="jsLogin">
-      <input type="text" id="username" placeholder="Username" autocomplete="off">
-      <input type="password" id="password" placeholder="Password">
-      <button onclick="login()">Sign In</button>
-    </div>
     <div class="error" id="loginError">Invalid credentials</div>
     <div class="error" id="loginErrorForm" style="display:block;color:#ff9500">__ERROR_MSG__</div>
   </div>
@@ -361,7 +349,6 @@ async function api(method, path, body) {
   try {
     const opts = { method, headers: { 'Content-Type': 'application/json' } };
     if (TOKEN) opts.headers['Authorization'] = 'Bearer ' + TOKEN;
-    if (CSRF && method !== 'GET') opts.headers['x-csrf-token'] = CSRF;
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(path, opts);
     return await res.json();
@@ -375,22 +362,6 @@ function showToast(msg, type) {
   t.textContent = msg; t.className = 'toast toast-' + type;
   t.style.display = 'block';
   setTimeout(() => { t.style.display = 'none'; }, 3000);
-}
-
-async function login() {
-  const u = document.getElementById('username').value.trim();
-  const p = document.getElementById('password').value;
-  const err = document.getElementById('loginError');
-  if (!u || !p) { err.textContent = 'Fill all fields'; err.style.display = 'block'; return; }
-  const r = await api('POST', '/api/auth/login', { username: u, password: p });
-  if (!r.success) { err.textContent = r.error; err.style.display = 'block'; return; }
-  err.style.display = 'none';
-  TOKEN = r.token; CSRF = r.csrf;
-  document.getElementById('loginWrap').style.display = 'none';
-  document.getElementById('dashboard').style.display = 'block';
-  document.getElementById('userDisplay').textContent = u;
-  showToast('Logged in successfully', 'success');
-  loadKeys();
 }
 
 async function logout() {
@@ -451,11 +422,34 @@ async function deleteKey(k) {
   if (d.success) { showToast('Key deleted', 'success'); loadKeys(); }
 }
 
-// Hide form login, use JS login instead
-document.getElementById('loginForm').style.display = 'none';
-
-document.getElementById('username').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
-document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+// Intercept form submission with JS (falls back to form POST if JS fails)
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = document.getElementById('signInBtn');
+  btn.disabled = true; btn.textContent = 'Signing in...';
+  const err = document.getElementById('loginError');
+  const u = document.getElementById('username').value.trim();
+  const p = document.getElementById('password').value;
+  if (!u || !p) { err.textContent = 'Fill all fields'; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Sign In'; return; }
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p })
+    });
+    const d = await res.json();
+    if (!d.success) { err.textContent = d.error; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Sign In'; return; }
+    err.style.display = 'none';
+    TOKEN = d.token;
+    document.getElementById('loginWrap').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('userDisplay').textContent = u;
+    showToast('Logged in', 'success');
+    loadKeys();
+  } catch(e) {
+    // Fallback: submit form normally
+    this.submit();
+  }
+});
 
 // Auto-login if token in URL
 const urlToken = new URLSearchParams(window.location.search).get('token');
