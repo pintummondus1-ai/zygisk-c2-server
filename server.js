@@ -171,45 +171,31 @@ app.all(["/c", "/api/c", "/api/verify-license"], (req, res) => {
 });
 
 // ===== AUTH API =====
-app.post("/api/auth/login", express.urlencoded({ extended: true }), (req, res) => {
+function doLogin(username, password) {
+  if (!username || !password) return { success: false, error: "Username and password required" };
+  const user = store._data.users[username];
+  if (!user || user.password !== crypto.createHash("sha256").update(password).digest("hex"))
+    return { success: false, error: "Invalid credentials" };
+  const csrf = crypto.randomBytes(32).toString("hex");
+  const token = jwtSign({ username, role: user.role, csrf });
+  return { success: true, token, csrf, expiresIn: 7200 };
+}
+
+app.post("/api/auth/login", (req, res) => {
   const ip = req.ip || req.connection?.remoteAddress || "unknown";
   const rl = rateLimit(ip);
   if (rl.count > 5)
     return res.json({ success: false, error: "Too many attempts. Try again in 15 min." });
-
-  const username = req.body?.username || req.query?.username;
-  const password = req.body?.password || req.query?.password;
-  if (!username || !password)
-    return res.json({ success: false, error: "Username and password required" });
-
-  const user = store._data.users[username];
-  if (!user || user.password !== crypto.createHash("sha256").update(password).digest("hex"))
-    return res.json({ success: false, error: "Invalid credentials" });
-
-  const csrf = crypto.randomBytes(32).toString("hex");
-  const token = jwtSign({ username, role: user.role, csrf });
-  res.json({ success: true, token, csrf, expiresIn: 7200 });
+  res.json(doLogin(req.body?.username, req.body?.password));
 });
 
-// Form-based login fallback (works without JS)
 app.post("/api/auth/login-form", express.urlencoded({ extended: true }), (req, res) => {
   const ip = req.ip || req.connection?.remoteAddress || "unknown";
   const rl = rateLimit(ip);
-  if (rl.count > 5)
-    return res.redirect("/?error=rate_limit");
-
-  const username = req.body?.username;
-  const password = req.body?.password;
-  if (!username || !password)
-    return res.redirect("/?error=empty");
-
-  const user = store._data.users[username];
-  if (!user || user.password !== crypto.createHash("sha256").update(password).digest("hex"))
-    return res.redirect("/?error=invalid");
-
-  const csrf = crypto.randomBytes(32).toString("hex");
-  const token = jwtSign({ username, role: user.role, csrf });
-  res.redirect("/?token=" + token);
+  if (rl.count > 5) return res.redirect("/?error=rate_limit");
+  const result = doLogin(req.body?.username, req.body?.password);
+  if (!result.success) return res.redirect("/?error=invalid");
+  res.redirect("/?token=" + result.token);
 });
 
 app.get("/api/auth/check", requireAuth, (req, res) => {
