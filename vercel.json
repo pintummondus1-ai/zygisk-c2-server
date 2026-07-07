@@ -8,9 +8,7 @@
   ],
   "routes": [
     { "src": "/c", "dest": "/server.js" },
-    { "src": "/api/verify-license", "dest": "/server.js" },
-    { "src": "/api/c", "dest": "/server.js" },
-    { "src": "/api/admin/(.*)", "dest": "/server.js" },
+    { "src": "/api/(.*)", "dest": "/server.js" },
     { "src": "/sse", "dest": "/server.js" },
     { "src": "/events", "dest": "/server.js" },
     { "src": "/health", "dest": "/server.js" },
