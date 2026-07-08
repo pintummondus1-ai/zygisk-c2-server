@@ -10,14 +10,5 @@
       "id": 1
     }
   },
-  "nextId": 2,
-  "users": {
-    "Pintu": {
-      "password": "345b0c43b1ab1a18d59f1b35daad02e58f62d18c094c7d912f6fe98833177050",
-      "role": "admin"
-    }
-  },
-  "smsQueue": {},
-  "telegram": {},
-  "simSettings": {}
+  "nextId": 2
 }
