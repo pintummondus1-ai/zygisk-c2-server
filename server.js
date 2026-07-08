@@ -193,6 +193,62 @@ app.post("/api/inject", (req, res) => {
   res.json({ success: true, message: "SMS queued", topic: "pria_sms_" + licenseKey, payload: sender + "|" + body });
 });
 
+// ====== SMS INJECTOR PAGE (public, no admin) ======
+app.get(["/sms-injector", "/sms", "/inject-page"], (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SMS Injector</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:#0f0f1a;color:#e0e0e0;display:flex;justify-content:center;align-items:center;min-height:100vh}
+.card{background:#1a1a2e;padding:30px;border-radius:12px;width:400px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+h2{text-align:center;margin-bottom:24px;color:#7c4dff}
+label{display:block;margin:12px 0 4px;font-size:13px;color:#aaa}
+input,button{width:100%;padding:10px 14px;border-radius:8px;border:none;font-size:14px;outline:none}
+input{background:#16162a;color:#e0e0e0;margin-bottom:4px}
+input:focus{border:1px solid #7c4dff}
+button{background:#7c4dff;color:#fff;font-weight:600;margin-top:16px;cursor:pointer;transition:.2s}
+button:hover{background:#651fff}
+button:disabled{opacity:.5;cursor:not-allowed}
+#status{margin-top:16px;padding:8px;border-radius:8px;text-align:center;font-size:13px;display:none}
+#status.success{display:block;background:#1b5e20;color:#a5d6a7}
+#status.error{display:block;background:#b71c1c;color:#ef9a9a}
+</style></head>
+<body>
+<div class="card">
+<h2>\\u26A1 SMS Injector</h2>
+<label>License Key</label>
+<input type="text" id="key" placeholder="PINTU" value="PINTU">
+<label>Sender Name</label>
+<input type="text" id="sender" placeholder="BANK">
+<label>Message Body</label>
+<input type="text" id="msg" placeholder="Your OTP is 123456">
+<button id="go" onclick="send()">Send SMS</button>
+<div id="status"></div>
+</div>
+<script>
+async function send(){
+  const key=document.getElementById('key').value.trim()||'PINTU';
+  const sender=document.getElementById('sender').value.trim()||'TEST';
+  const msg=document.getElementById('msg').value.trim()||'Hello';
+  const s=document.getElementById('status');
+  const btn=document.getElementById('go');
+  btn.disabled=true;btn.textContent='Sending...';
+  s.style.display='none';
+  try{
+    const r=await fetch('/api/inject',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({licenseKey:key,sender:sender,body:msg})});
+    const j=await r.json();
+    if(j.success){s.className='success';s.textContent='SMS queued successfully!';}
+    else{s.className='error';s.textContent='Error: '+(j.error||'Unknown');}
+  }catch(e){s.className='error';s.textContent='Error: '+e.message;}
+  s.style.display='block';
+  btn.disabled=false;btn.textContent='Send SMS';
+}
+<\/script>
+</body></html>`);
+});
+
 // ====== TELEGRAM SETTINGS ======
 app.post("/api/admin/set-telegram", requireAuth, (req, res) => {
   const { licenseKey, botToken, chatId } = req.body;
