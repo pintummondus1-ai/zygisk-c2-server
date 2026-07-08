@@ -477,11 +477,11 @@ async function loadKeys() {
       '<td><span class="color-dot" style="background:'+colorHex+'"></span><span style="text-transform:capitalize">'+color+'</span></td>'+
       '<td><span class="badge '+b+'">'+s+'</span></td>'+
       '<td class="action-cell">'+
-      '<button class="btn btn-sm btn-danger" onclick="setColor(\''+k.licenseKey+'\')">Color</button>'+
-      (k.deviceId?'<button class="btn btn-sm btn-success" onclick="resetDevice(\''+k.licenseKey+'\')">Reset</button>':'')+
-      (!k.isBlocked?'<button class="btn btn-sm btn-danger" onclick="blockKey(\''+k.licenseKey+'\')">Block</button>':
-       '<button class="btn btn-sm btn-success" onclick="unblockKey(\''+k.licenseKey+'\')">Unblock</button>')+
-      '<button class="btn btn-sm btn-danger" onclick="deleteKey(\''+k.licenseKey+'\')">Del</button></td></tr>';
+      '<button class="btn btn-sm btn-danger" onclick="setColor('+"'"+'+k.licenseKey+'+"'"+')">Color</button>'+
+      (k.deviceId?'<button class="btn btn-sm btn-success" onclick="resetDevice('+"'"+'+k.licenseKey+'+"'"+')">Reset</button>':'')+
+      (!k.isBlocked?'<button class="btn btn-sm btn-danger" onclick="blockKey('+"'"+'+k.licenseKey+'+"'"+')">Block</button>':
+       '<button class="btn btn-sm btn-success" onclick="unblockKey('+"'"+'+k.licenseKey+'+"'"+')">Unblock</button>')+
+      '<button class="btn btn-sm btn-danger" onclick="deleteKey('+"'"+'+k.licenseKey+'+"'"+')">Del</button></td></tr>';
   }).join('');
 }
 
