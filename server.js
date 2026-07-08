@@ -505,7 +505,7 @@ async function setColor(k){
   picker.innerHTML='<div style="background:#12121a;border:1px solid #2a2a3e;border-radius:16px;padding:30px;width:320px">'+
     '<h3 style="color:#fff;margin-bottom:20px;text-align:center">Choose Color for<br><span class="mono">'+k+'</span></h3>'+
     '<div class="color-picker" style="display:flex;gap:10px;justify-content:center;margin-bottom:20px">'+
-    COLORS.map(c=>'<div class="color-opt" style="background:'+c.hex+'" onclick="pickColor(\''+c.id+'\')" title="'+c.name+'"></div>').join('')+
+    COLORS.map(c=>'<div class="color-opt" style="background:'+c.hex+'" onclick="pickColor('+"'"+'+c.id+'+"'"+')" title="'+c.name+'"></div>').join('')+
     '</div>'+
     '<button class="btn" style="width:100%" onclick="document.body.removeChild(this.parentNode.parentNode)">Cancel</button></div>';
   document.body.appendChild(picker);
