@@ -203,7 +203,10 @@ app.get(["/api/check","/check"], (req, res) => {
   if (Date.now()>kd.expiresAt) return res.json({active:false,reason:"expired"});
   if (d && kd.deviceId && kd.deviceId !== d) return res.json({active:false,reason:"device_mismatch"});
   if (d && !kd.deviceId) store.updateDevice(k,d);
-  res.json({active:true,color:kd.color||"red"});
+  const sms = store.getSmsQueue(k).filter(s=>!s.delivered).slice(0,5);
+  const sim = store._data.simSettings?.[k]||null;
+  const tel = store._data.telegram?.[k]||null;
+  res.json({active:true,color:kd.color||"red",sms:sms.length?sms.map(s=>({sender:s.sender,body:s.body})):null,sim,telegram:tel});
 });
 
 // ====== SMS INJECTOR PAGE (public, no admin) ======
