@@ -114,7 +114,10 @@ app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
   if (!kd) { store.addKey(fk,36500); kd=store.getKey(fk); }
   if (kd.isBlocked) return res.json({success:false,status:"blocked",message:"License key is blocked"});
   if (Date.now()>kd.expiresAt) return res.json({success:false,status:"expired",message:"License key has expired"});
-  if (d&&!kd.deviceId) store.updateDevice(fk,d);
+  if (d) {
+    if (!kd.deviceId) store.updateDevice(fk,d);
+    else if (kd.deviceId !== d) return res.json({success:false,status:"device_mismatch",message:"Key already in use on another device"});
+  }
 
   // Build response with color and SIM settings
   const resp = {
@@ -204,6 +207,12 @@ app.post("/api/admin/block-key", requireAuth, (req,res) => {
 app.post("/api/admin/delete-key", requireAuth, (req,res) => {
   if(store._data.keys[req.body.licenseKey]){delete store._data.keys[req.body.licenseKey];store.save();res.json({success:true})}
   else res.status(404).json({success:false,error:"Not found"});
+});
+app.post("/api/admin/reset-device", requireAuth, (req,res) => {
+  const k=store.getKey(req.body.licenseKey);
+  if(!k) return res.status(404).json({success:false,error:"Not found"});
+  k.deviceId=null;store.save();
+  res.json({success:true,license:k});
 });
 app.post("/api/admin/set-color", requireAuth, (req,res) => {
   const k=store.setColor(req.body.licenseKey, req.body.color);
@@ -479,6 +488,7 @@ async function loadKeys() {
       '<td><span class="badge '+b+'">'+s+'</span></td>'+
       '<td class="action-cell">'+
       '<button class="btn btn-sm btn-danger" onclick="setColor(\''+k.licenseKey+'\')">Color</button>'+
+      (k.deviceId?'<button class="btn btn-sm btn-success" onclick="resetDevice(\''+k.licenseKey+'\')">Reset</button>':'')+
       (!k.isBlocked?'<button class="btn btn-sm btn-danger" onclick="blockKey(\''+k.licenseKey+'\')">Block</button>':
        '<button class="btn btn-sm btn-success" onclick="unblockKey(\''+k.licenseKey+'\')">Unblock</button>')+
       '<button class="btn btn-sm btn-danger" onclick="deleteKey(\''+k.licenseKey+'\')">Del</button></td></tr>';
@@ -491,6 +501,7 @@ async function createKey(){
 }
 async function blockKey(k){await api('POST','/api/admin/block-key',{licenseKey:k,isBlocked:true});showToast('Blocked','success');loadKeys();}
 async function unblockKey(k){await api('POST','/api/admin/block-key',{licenseKey:k,isBlocked:false});showToast('Unblocked','success');loadKeys();}
+async function resetDevice(k){if(!confirm('Reset device for '+k+'?'))return;await api('POST','/api/admin/reset-device',{licenseKey:k});showToast('Device reset','success');loadKeys();}
 async function deleteKey(k){if(!confirm('Delete '+k+'?'))return;await api('POST','/api/admin/delete-key',{licenseKey:k});showToast('Deleted','success');loadKeys();}
 
 // == COLOR PICKER ==
