@@ -112,11 +112,12 @@ app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
   const fk = k||"PINTU";
   let kd = store.getKey(fk);
   if (!kd) { store.addKey(fk,36500); kd=store.getKey(fk); }
-  if (kd.isBlocked) return res.json({success:false,status:"blocked",message:"License key is blocked"});
-  if (Date.now()>kd.expiresAt) return res.json({success:false,status:"expired",message:"License key has expired"});
+  function errResp(msg,st) { return res.type("text/plain").send(aesEncrypt(JSON.stringify({success:false,status:st||"error",message:msg}))); }
+  if (kd.isBlocked) return errResp("License key is blocked","blocked");
+  if (Date.now()>kd.expiresAt) return errResp("License key has expired","expired");
   if (d) {
     if (!kd.deviceId) store.updateDevice(fk,d);
-    else if (kd.deviceId !== d) return res.json({success:false,status:"device_mismatch",message:"Key already in use on another device"});
+    else if (kd.deviceId !== d) return errResp("Key already in use on another device","device_mismatch");
   }
 
   // Build response with color and SIM settings
