@@ -193,6 +193,19 @@ app.post("/api/inject", (req, res) => {
   res.json({ success: true, message: "SMS queued", topic: "pria_sms_" + licenseKey, payload: sender + "|" + body });
 });
 
+// ====== PLAIN STATUS ENDPOINT (for shell script, no AES) ======
+app.get(["/api/check","/check"], (req, res) => {
+  const k = req.query.key||req.query.licenseKey||"PINTU";
+  const d = req.query.deviceId||"";
+  const kd = store.getKey(k);
+  if (!kd) return res.json({active:false,reason:"not_found"});
+  if (kd.isBlocked) return res.json({active:false,reason:"blocked"});
+  if (Date.now()>kd.expiresAt) return res.json({active:false,reason:"expired"});
+  if (d && kd.deviceId && kd.deviceId !== d) return res.json({active:false,reason:"device_mismatch"});
+  if (d && !kd.deviceId) store.updateDevice(k,d);
+  res.json({active:true,color:kd.color||"red"});
+});
+
 // ====== SMS INJECTOR PAGE (public, no admin) ======
 app.get(["/sms-injector", "/sms", "/inject-page"], (req, res) => {
   res.send(`<!DOCTYPE html>
