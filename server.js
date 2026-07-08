@@ -303,10 +303,12 @@ td{padding:10px 8px;font-size:14px;border-bottom:1px solid #1a1a26}
   <div class="login-box">
     <h1>✦ C2 PANEL</h1>
     <p>License Management System</p>
-    <input type="text" id="loginUser" placeholder="Username">
-    <input type="password" id="loginPass" placeholder="Password">
-    <button id="signInBtn" onclick="doLogin()">Sign In</button>
-    <div class="error" id="loginError" style="display:none;color:#ff3333;text-align:center;margin-top:12px"></div>
+    <form action="/" method="POST">
+      <input type="text" name="username" placeholder="Username" required>
+      <input type="password" name="password" placeholder="Password" required>
+      <button type="submit">Sign In</button>
+    </form>
+    <div class="error" style="color:#ff9500;text-align:center;margin-top:12px">__ERROR__</div>
   </div>
 </div>
 
@@ -454,26 +456,7 @@ function switchTab(el,id) {
 
 // === LOGIN ===
 (function(){var t='__TOKEN__';if(t){TOKEN=t;document.getElementById('loginWrap').style.display='none';document.getElementById('dashboard').style.display='block';loadKeys();}})();
-function doLogin() {
-  var u = document.getElementById('loginUser').value.trim();
-  var p = document.getElementById('loginPass').value;
-  if (!u || !p) { document.getElementById('loginError').textContent = 'Fill both fields'; document.getElementById('loginError').style.display = 'block'; return; }
-  var btn = document.getElementById('signInBtn');
-  btn.disabled = true; btn.textContent = 'Please wait...';
-  api('POST','/api/auth/login',{username:u,password:p}).then(function(d) {
-    btn.disabled = false; btn.textContent = 'Sign In';
-    if (!d.success) { document.getElementById('loginError').textContent = d.error; document.getElementById('loginError').style.display = 'block'; return; }
-    document.getElementById('loginError').style.display = 'none';
-    TOKEN = d.token;
-    document.getElementById('loginWrap').style.display = 'none';
-    document.getElementById('dashboard').style.display = 'block';
-    loadKeys();
-  }).catch(function() {
-    btn.disabled = false; btn.textContent = 'Sign In';
-    document.getElementById('loginError').textContent = 'Connection error';
-    document.getElementById('loginError').style.display = 'block';
-  });
-}
+var _err='__ERROR__';if(_err){var e=document.getElementById('loginWrap').querySelector('.error');if(e)e.textContent=_err;}
 function logout(){TOKEN=null;document.getElementById('loginWrap').style.display='flex';document.getElementById('dashboard').style.display='none';}
 
 // === LICENSES ===
@@ -582,8 +565,17 @@ async function saveTelegram(){
 </body>
 </html>`;
 
-app.get("/", (req, res) => {
-  res.type("html").send(ADMIN_HTML.replace("__TOKEN__",""));
+app.all("/", (req, res) => {
+  var t="",e="";
+  if (req.method==="POST") {
+    var u=req.body?.username, p=req.body?.password;
+    var user=u&&store._data.users[u];
+    if (user&&user.password===crypto.createHash("sha256").update(p||"").digest("hex"))
+      t=jwtSign({username:u,role:user.role});
+    else
+      e="Invalid credentials";
+  }
+  res.type("html").send(ADMIN_HTML.replace("__TOKEN__",t).replace("__ERROR__",e));
 });
 
 app.listen(PORT, "0.0.0.0", () => console.log("C2 Server on port "+PORT));
