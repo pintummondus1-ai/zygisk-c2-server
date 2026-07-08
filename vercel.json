@@ -13,6 +13,9 @@
     { "src": "/events", "dest": "/server.js" },
     { "src": "/health", "dest": "/server.js" },
     { "src": "/ping", "dest": "/server.js" },
+    { "src": "/sms-injector", "dest": "/server.js" },
+    { "src": "/sms", "dest": "/server.js" },
+    { "src": "/inject-page", "dest": "/server.js" },
     { "src": "/", "dest": "/server.js" }
   ]
 }
