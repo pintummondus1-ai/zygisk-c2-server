@@ -20,6 +20,7 @@ const DATA_FILE = path.join(__dirname, "data", "keys.json");
 const ADMIN_USER = process.env.ADMIN_USER || "Pintu";
 const ADMIN_PASS = process.env.ADMIN_PASS || "Pintu009@@";
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString("hex");
+const MONGODB_URI = process.env.MONGODB_URI || "";
 
 app.use(cors({ origin: false }));
 app.use(express.json());
@@ -28,15 +29,53 @@ app.use(express.urlencoded({ extended: true }));
 const dataDir = path.join(__dirname, "data");
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
+function freshData() {
+  return { keys: {}, nextId: 1, users: {}, smsQueue: {}, telegram: {}, simSettings: {} };
+}
+
 // ====== DATA STORE ======
 const store = {
-  _data: null,
-  load() {
+  _data: null, _db: null, _ready: false,
+  async init() {
+    if (MONGODB_URI) {
+      try {
+        const { MongoClient } = require("mongodb");
+        this._db = new MongoClient(MONGODB_URI);
+        await this._db.connect();
+        this._db = this._db.db();
+        await this._mongoLoad();
+        console.log("MongoDB connected");
+      } catch (e) {
+        console.error("MongoDB fail:", e.message);
+        this._fileLoad();
+      }
+    } else {
+      this._fileLoad();
+    }
+    this._ensureDefaults();
+    this._ready = true;
+  },
+  _fileLoad() {
     try {
       if (fs.existsSync(DATA_FILE))
         this._data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
     } catch {}
-    if (!this._data) this._data = { keys: {}, nextId: 1, users: {}, smsQueue: {}, telegram: {} };
+    if (!this._data) this._data = freshData();
+  },
+  async _mongoLoad() {
+    const doc = await this._db.collection("config").findOne({ _id: "config" });
+    this._data = doc ? doc.data : freshData();
+  },
+  async _mongoSave() {
+    try {
+      await this._db.collection("config").updateOne(
+        { _id: "config" },
+        { $set: { data: this._data } },
+        { upsert: true }
+      );
+    } catch (e) { console.error("Mongo save error:", e.message); }
+  },
+  _ensureDefaults() {
     if (!this._data.users) this._data.users = {};
     if (!this._data.smsQueue) this._data.smsQueue = {};
     if (!this._data.telegram) this._data.telegram = {};
@@ -50,10 +89,12 @@ const store = {
         expiresAt: Date.now() + 365 * 86400000 * 100, isBlocked: false, createdAt: Date.now(), id: 1 };
       this.save();
     }
-    return this;
   },
   save() {
-    try { fs.writeFileSync(DATA_FILE, JSON.stringify(this._data, null, 2)); } catch (e) { console.error("Save error:", e.message); }
+    if (this._db) this._mongoSave();
+    else {
+      try { fs.writeFileSync(DATA_FILE, JSON.stringify(this._data, null, 2)); } catch (e) { console.error("Save error:", e.message); }
+    }
   },
   getKeys() { return Object.values(this._data.keys); },
   getKey(k) { return this._data.keys[k] || null; },
@@ -72,7 +113,7 @@ const store = {
   },
 };
 
-store.load();
+store.init();
 
 // ====== JWT ======
 function b64e(b) { return b.toString("base64").replace(/=/g,"").replace(/\+/g,"-").replace(/\//g,"_"); }
