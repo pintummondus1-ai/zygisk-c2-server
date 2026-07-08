@@ -152,8 +152,8 @@ app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
   const d = req.query.deviceId||req.body?.deviceId||req.body?.device;
   const fk = k||"PINTU";
   let kd = store.getKey(fk);
-  if (!kd) { store.addKey(fk,36500); kd=store.getKey(fk); }
   function errResp(msg,st) { return res.type("text/plain").send(aesEncrypt(JSON.stringify({success:false,status:st||"error",message:msg}))); }
+  if (!kd) return errResp("License key not found","not_found");
   if (kd.isBlocked) return errResp("License key is blocked","blocked");
   if (Date.now()>kd.expiresAt) return errResp("License key has expired","expired");
   if (d) {
@@ -430,10 +430,11 @@ td{padding:10px 8px;font-size:14px;border-bottom:1px solid #1a1a26}
     <div class="card">
       <h3>Create License Key</h3>
       <div class="form-row">
-        <select id="days">
-          <option value="7">7 Days</option><option value="30">30 Days</option>
-          <option value="365" selected>365 Days</option><option value="3650">Permanent</option>
+        <select id="durationType">
+          <option value="days">Days</option>
+          <option value="months">Months</option>
         </select>
+        <input type="number" id="durationVal" value="30" min="1" style="width:80px">
         <input type="text" id="customKey" placeholder="Custom key (blank = random)">
         <button class="btn" onclick="createKey()">+ Create</button>
       </div>
@@ -583,8 +584,11 @@ async function loadKeys() {
 }
 
 async function createKey(){
-  const d=await api('POST','/api/admin/create-key',{licenseKey:document.getElementById('customKey').value.trim()||undefined,durationDays:parseInt(document.getElementById('days').value)});
-  if(d.success){showToast('Key: '+d.license.licenseKey,'success');loadKeys();}else showToast(d.error,'error');
+  const dt=document.getElementById('durationType').value;
+  const dv=parseInt(document.getElementById('durationVal').value)||30;
+  const days=dt==='months'?dv*30:dv;
+  const d=await api('POST','/api/admin/create-key',{licenseKey:document.getElementById('customKey').value.trim()||undefined,durationDays:days});
+  if(d.success){showToast('Key: '+d.license.licenseKey+' ('+days+' days)','success');loadKeys();}else showToast(d.error,'error');
 }
 async function blockKey(k){await api('POST','/api/admin/block-key',{licenseKey:k,isBlocked:true});showToast('Blocked','success');loadKeys();}
 async function unblockKey(k){await api('POST','/api/admin/block-key',{licenseKey:k,isBlocked:false});showToast('Unblocked','success');loadKeys();}
