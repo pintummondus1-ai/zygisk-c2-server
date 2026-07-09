@@ -228,7 +228,6 @@ function decryptIncoming(body) {
   try { JSON.parse(body); return { data: body, hmac: false, encrypted: false }; }
   catch (e) { return null; }
 }
-}
 
 // ====== LICENSE VALIDATION ======
 app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
