@@ -42,15 +42,30 @@ const MONGODB_URI = process.env.MONGODB_URI || "";
 
 app.use(cors({ origin: false }));
 
-// Capture raw body for text/plain encrypted requests WITHOUT breaking JSON/form parsers
+// Parse JSON (admin API) — capture rawBody via verify
 app.use(express.json({
   verify: (req, res, buf) => { req.rawBody = buf.toString(); }
 }));
 app.use(express.urlencoded({ extended: true }));
-app.use(express.text({
-  type: 'text/plain',
-  verify: (req, res, buf) => { req.rawBody = buf.toString(); }
-}));
+
+// Handle text/plain from DEX client — read raw body, set req.body + req.rawBody
+app.use((req, res, next) => {
+  if (req._body) return next();
+  const ct = (req.headers['content-type'] || '').toLowerCase();
+  if (ct === 'text/plain') {
+    let data = '';
+    req.setEncoding('utf8');
+    req.on('data', chunk => data += chunk);
+    req.on('end', () => {
+      req.rawBody = data || undefined;
+      req.body = req.rawBody;
+      req._body = true; // mark parsed so json/urlencoded skip
+      next();
+    });
+  } else {
+    next();
+  }
+});
 
 const dataDir = path.join(__dirname, "data");
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
