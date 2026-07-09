@@ -222,11 +222,12 @@ function decryptIncoming(body) {
     catch (e) { /* fall through */ }
   }
   // Try plain AES (old module)
-  try { return { data: aesDecrypt(body), hmac: false }; }
+  try { const d = aesDecrypt(body); return { data: d, hmac: false, encrypted: true }; }
   catch (e) { /* fall through */ }
   // If it's valid JSON, it's a plaintext request (no encryption)
-  try { JSON.parse(body); return { data: body, hmac: false }; }
+  try { JSON.parse(body); return { data: body, hmac: false, encrypted: false }; }
   catch (e) { return null; }
+}
 }
 
 // ====== LICENSE VALIDATION ======
@@ -245,7 +246,8 @@ app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
         licenseKey = parsed.licenseKey || parsed.key || null;
         deviceId = parsed.deviceId || parsed.device || null;
         useHmac = result.hmac;
-        console.log(`verify-license: OK key=${licenseKey} device=${deviceId} hmac=${result.hmac}`);
+        req._wasEncrypted = result.encrypted === true;
+        console.log(`verify-license: OK key=${licenseKey} device=${deviceId} hmac=${result.hmac} encrypted=${req._wasEncrypted}`);
       } catch (e) {
         console.log(`verify-license: PARSE FAIL: ${e.message}`);
       }
@@ -266,8 +268,8 @@ app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
   function encResp(obj) {
     const json = JSON.stringify(obj);
     if (useHmac) return aesEncryptSigned(json);
-    // Plain AES or plaintext — send as-is (client-side encrypt/decrypt is no-op for testing)
-    return json;
+    if (req._wasEncrypted) return aesEncrypt(json); // old module expects encrypted response
+    return json; // plaintext request → plaintext response
   }
   function errResp(msg,st) { return res.type("text/plain").send(encResp({success:false,status:st||"error",message:msg})); }
   if (!kd) return errResp("License key not found","not_found");
