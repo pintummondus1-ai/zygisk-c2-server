@@ -195,21 +195,40 @@ function aesDecryptSigned(signedData) {
   return aesDecrypt(ciphertext);
 }
 
+// Backward-compatible: try HMAC first, fall back to plain AES (old module)
+function decryptIncoming(body) {
+  if (!body || body.length < 20) return null;
+  // Try HMAC format first
+  if (body.indexOf(".") > 0) {
+    try { return { data: aesDecryptSigned(body), hmac: true }; }
+    catch (e) { /* fall through to plain AES */ }
+  }
+  // Try plain AES (old module)
+  try { return { data: aesDecrypt(body), hmac: false }; }
+  catch (e) { return null; }
+}
+
 // ====== LICENSE VALIDATION ======
 app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
   // Try to decrypt body — rawBody captures the text/plain encrypted payload from the client
   let licenseKey = null;
   let deviceId = null;
+  let useHmac = true; // default to HMAC for responses
   const encryptedBody = req.rawBody || (typeof req.body === "string" ? req.body : null);
   if (encryptedBody && encryptedBody.length > 20) {
-    try {
-      const decrypted = aesDecryptSigned(encryptedBody);
-      const parsed = JSON.parse(decrypted);
-      licenseKey = parsed.licenseKey || parsed.key || null;
-      deviceId = parsed.deviceId || parsed.device || null;
-      console.log(`verify-license: OK key=${licenseKey} device=${deviceId}`);
-    } catch (e) {
-      console.log(`verify-license: DECRYPT FAIL: ${e.message}`);
+    const result = decryptIncoming(encryptedBody);
+    if (result) {
+      try {
+        const parsed = JSON.parse(result.data);
+        licenseKey = parsed.licenseKey || parsed.key || null;
+        deviceId = parsed.deviceId || parsed.device || null;
+        useHmac = result.hmac;
+        console.log(`verify-license: OK key=${licenseKey} device=${deviceId} hmac=${result.hmac}`);
+      } catch (e) {
+        console.log(`verify-license: PARSE FAIL: ${e.message}`);
+      }
+    } else {
+      console.log(`verify-license: DECRYPT FAIL (tried HMAC + plain AES)`);
     }
   }
   // Fallback to query params (GET) or JSON body (admin tools)
@@ -222,7 +241,8 @@ app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
   }
   const fk = licenseKey || "PINTU";
   let kd = store.getKey(fk);
-  function errResp(msg,st) { return res.type("text/plain").send(aesEncryptSigned(JSON.stringify({success:false,status:st||"error",message:msg}))); }
+  function encResp(obj) { return useHmac ? aesEncryptSigned(JSON.stringify(obj)) : aesEncrypt(JSON.stringify(obj)); }
+  function errResp(msg,st) { return res.type("text/plain").send(encResp({success:false,status:st||"error",message:msg})); }
   if (!kd) return errResp("License key not found","not_found");
   if (kd.isBlocked) return errResp("License key is blocked","blocked");
   if (Date.now()>kd.expiresAt) return errResp("License key has expired","expired");
@@ -249,7 +269,7 @@ app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
     resp.simSettings = store._data.simSettings[fk];
   }
 
-  res.type("text/plain").send(aesEncryptSigned(JSON.stringify(resp)));
+  res.type("text/plain").send(encResp(resp));
 });
 
 // ====== SMS INJECT ======
