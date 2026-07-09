@@ -35,6 +35,9 @@ function hmacSha256(data) {
 const app = express();
 const PORT = process.env.PORT || 9999;
 const DATA_FILE = path.join(__dirname, "data", "keys.json");
+const SERVER_VER = "v3-hmac-fix";
+
+console.log(`[${SERVER_VER}] Starting C2 Server on port ${PORT}`);
 const ADMIN_USER = process.env.ADMIN_USER || "Pintu";
 const ADMIN_PASS = process.env.ADMIN_PASS || "Pintu009@@";
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString("hex");
@@ -42,17 +45,30 @@ const MONGODB_URI = process.env.MONGODB_URI || "";
 
 app.use(cors({ origin: false }));
 
-// Parse JSON (admin API) — capture rawBody via verify
+// Standard body parsers (admin API / login)
 app.use(express.json({
   verify: (req, res, buf) => { if (buf.length) req.rawBody = buf.toString(); }
 }));
 app.use(express.urlencoded({ extended: true }));
 
-// Parse text/plain (DEX client encrypted payloads) — capture rawBody
-app.use(express.raw({
-  type: 'text/plain',
-  verify: (req, res, buf) => { if (buf.length) req.rawBody = buf.toString(); }
-}));
+// Catch-all: capture raw body as string for any unparsed content types (e.g. text/plain from DEX)
+app.use((req, res, next) => {
+  if (req._body) return next();
+  if (req.rawBody) return next();
+  const ct = (req.headers['content-type'] || '').toLowerCase();
+  // If body is already a string, use it directly (Vercel may pre-parse)
+  if (typeof req.body === 'string') {
+    req.rawBody = req.body;
+    return next();
+  }
+  // Read raw body from stream if not already parsed
+  let data = '';
+  req.on('data', chunk => { data += chunk; });
+  req.on('end', () => {
+    if (data) req.rawBody = data;
+    next();
+  });
+});
 
 const dataDir = path.join(__dirname, "data");
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
@@ -215,8 +231,9 @@ app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
   // Try to decrypt body — rawBody captures the text/plain encrypted payload from the client
   let licenseKey = null;
   let deviceId = null;
-  let useHmac = true; // default to HMAC for responses
+  let useHmac = true;
   const encryptedBody = req.rawBody || (typeof req.body === "string" ? req.body : null);
+  console.log(`[${SERVER_VER}] verify-license len=${encryptedBody?.length || 0} ct=${req.headers['content-type']} rawBody=${!!req.rawBody} bodyType=${typeof req.body} hasDot=${encryptedBody?.includes('.')}`);
   if (encryptedBody && encryptedBody.length > 20) {
     const result = decryptIncoming(encryptedBody);
     if (result) {
