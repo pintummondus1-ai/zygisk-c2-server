@@ -42,19 +42,15 @@ const MONGODB_URI = process.env.MONGODB_URI || "";
 
 app.use(cors({ origin: false }));
 
-// Capture raw body for ALL requests before body parsers (needed for text/plain from client)
-app.use((req, res, next) => {
-  let data = '';
-  req.setEncoding('utf8');
-  req.on('data', chunk => data += chunk);
-  req.on('end', () => {
-    req.rawBody = data || undefined;
-    next();
-  });
-});
-
-app.use(express.json());
+// Capture raw body for text/plain encrypted requests WITHOUT breaking JSON/form parsers
+app.use(express.json({
+  verify: (req, res, buf) => { req.rawBody = buf.toString(); }
+}));
 app.use(express.urlencoded({ extended: true }));
+app.use(express.text({
+  type: 'text/plain',
+  verify: (req, res, buf) => { req.rawBody = buf.toString(); }
+}));
 
 const dataDir = path.join(__dirname, "data");
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
