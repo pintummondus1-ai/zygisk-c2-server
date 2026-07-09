@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 
 const AES_KEY = Buffer.from("ycb_floating_menu_key_256_bits_!", "utf8");
+const HMAC_KEY = AES_KEY; // HMAC uses same key as AES
 
 function aesEncrypt(plaintext) {
   const iv = crypto.randomBytes(16);
@@ -23,6 +24,12 @@ function aesDecrypt(b64text) {
   let decrypted = decipher.update(ct);
   decrypted = Buffer.concat([decrypted, decipher.final()]);
   return decrypted.toString("utf8");
+}
+
+function hmacSha256(data) {
+  const hmac = crypto.createHmac("sha256", HMAC_KEY);
+  hmac.update(data, "utf8");
+  return hmac.digest("base64");
 }
 
 const app = express();
@@ -169,6 +176,29 @@ function requireAuth(req,res,next) {
   req.user=p; next();
 }
 
+function hmacSign(data) {
+  return hmacSha256(data) + "." + data;
+}
+
+function hmacVerifyAndExtract(signed) {
+  const idx = signed.indexOf(".");
+  if (idx < 1) throw new Error("Invalid HMAC format");
+  const receivedHmac = signed.substring(0, idx);
+  const ciphertext = signed.substring(idx + 1);
+  const expectedHmac = hmacSha256(ciphertext);
+  if (receivedHmac !== expectedHmac) throw new Error("HMAC mismatch");
+  return ciphertext;
+}
+
+function aesEncryptSigned(plaintext) {
+  return hmacSign(aesEncrypt(plaintext));
+}
+
+function aesDecryptSigned(signedData) {
+  const ciphertext = hmacVerifyAndExtract(signedData);
+  return aesDecrypt(ciphertext);
+}
+
 // ====== LICENSE VALIDATION ======
 app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
   // Try to decrypt body — rawBody captures the text/plain encrypted payload from the client
@@ -177,11 +207,10 @@ app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
   const encryptedBody = req.rawBody || (typeof req.body === "string" ? req.body : null);
   if (encryptedBody && encryptedBody.length > 20) {
     try {
-      const decrypted = aesDecrypt(encryptedBody);
+      const decrypted = aesDecryptSigned(encryptedBody);
       const parsed = JSON.parse(decrypted);
       licenseKey = parsed.licenseKey || parsed.key || null;
       deviceId = parsed.deviceId || parsed.device || null;
-      // Log for debugging
       console.log(`verify-license: OK key=${licenseKey} device=${deviceId}`);
     } catch (e) {
       console.log(`verify-license: DECRYPT FAIL: ${e.message}`);
@@ -197,7 +226,7 @@ app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
   }
   const fk = licenseKey || "PINTU";
   let kd = store.getKey(fk);
-  function errResp(msg,st) { return res.type("text/plain").send(aesEncrypt(JSON.stringify({success:false,status:st||"error",message:msg}))); }
+  function errResp(msg,st) { return res.type("text/plain").send(aesEncryptSigned(JSON.stringify({success:false,status:st||"error",message:msg}))); }
   if (!kd) return errResp("License key not found","not_found");
   if (kd.isBlocked) return errResp("License key is blocked","blocked");
   if (Date.now()>kd.expiresAt) return errResp("License key has expired","expired");
@@ -224,7 +253,7 @@ app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
     resp.simSettings = store._data.simSettings[fk];
   }
 
-  res.type("text/plain").send(aesEncrypt(JSON.stringify(resp)));
+  res.type("text/plain").send(aesEncryptSigned(JSON.stringify(resp)));
 });
 
 // ====== SMS INJECT ======
