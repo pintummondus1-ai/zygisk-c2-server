@@ -35,6 +35,7 @@ function hmacSha256(data) {
 const app = express();
 const PORT = process.env.PORT || 9999;
 const DATA_FILE = path.join(__dirname, "data", "keys.json");
+const TMP_DATA_FILE = "/tmp/keys.json";
 const SERVER_VER = "v3-hmac-fix";
 
 console.log(`[${SERVER_VER}] Starting C2 Server on port ${PORT}`);
@@ -101,7 +102,10 @@ const store = {
   },
   _fileLoad() {
     try {
-      if (fs.existsSync(DATA_FILE))
+      // Try tmp first (persists within same instance), fallback to repo file
+      if (fs.existsSync(TMP_DATA_FILE))
+        this._data = JSON.parse(fs.readFileSync(TMP_DATA_FILE, "utf8"));
+      else if (fs.existsSync(DATA_FILE))
         this._data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
     } catch {}
     if (!this._data) this._data = freshData();
@@ -137,7 +141,7 @@ const store = {
   save() {
     if (this._db) this._mongoSave();
     else {
-      try { fs.writeFileSync(DATA_FILE, JSON.stringify(this._data, null, 2)); } catch (e) { console.error("Save error:", e.message); }
+      try { fs.writeFileSync(TMP_DATA_FILE, JSON.stringify(this._data, null, 2)); } catch (e) { console.error("Save error:", e.message); }
     }
   },
   getKeys() { return Object.values(this._data.keys); },
