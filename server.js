@@ -34,7 +34,18 @@ const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString("he
 const MONGODB_URI = process.env.MONGODB_URI || "";
 
 app.use(cors({ origin: false }));
-app.use(express.text({ type: "text/plain" }));
+
+// Capture raw body for ALL requests before body parsers (needed for text/plain from client)
+app.use((req, res, next) => {
+  let data = '';
+  req.setEncoding('utf8');
+  req.on('data', chunk => data += chunk);
+  req.on('end', () => {
+    req.rawBody = data || undefined;
+    next();
+  });
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -160,16 +171,21 @@ function requireAuth(req,res,next) {
 
 // ====== LICENSE VALIDATION ======
 app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
-  // Try to decrypt body (POST from client with encrypted payload, text/plain)
+  // Try to decrypt body — rawBody captures the text/plain encrypted payload from the client
   let licenseKey = null;
   let deviceId = null;
-  if (req.body && typeof req.body === "string" && req.body.length > 20) {
+  const encryptedBody = req.rawBody || (typeof req.body === "string" ? req.body : null);
+  if (encryptedBody && encryptedBody.length > 20) {
     try {
-      const decrypted = aesDecrypt(req.body);
+      const decrypted = aesDecrypt(encryptedBody);
       const parsed = JSON.parse(decrypted);
       licenseKey = parsed.licenseKey || parsed.key || null;
-      deviceId = parsed.deviceId || parsed.device || deviceId;
-    } catch (_) {}
+      deviceId = parsed.deviceId || parsed.device || null;
+      // Log for debugging
+      console.log(`verify-license: OK key=${licenseKey} device=${deviceId}`);
+    } catch (e) {
+      console.log(`verify-license: DECRYPT FAIL: ${e.message}`);
+    }
   }
   // Fallback to query params (GET) or JSON body (admin tools)
   if (!licenseKey) {
