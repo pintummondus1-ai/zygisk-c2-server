@@ -213,16 +213,19 @@ function aesDecryptSigned(signedData) {
   return aesDecrypt(ciphertext);
 }
 
-// Backward-compatible: try HMAC first, fall back to plain AES (old module)
+// Backward-compatible: try HMAC first, fall back to plain AES, then plain JSON
 function decryptIncoming(body) {
-  if (!body || body.length < 20) return null;
+  if (!body || body.length < 10) return null;
   // Try HMAC format first
   if (body.indexOf(".") > 0) {
     try { return { data: aesDecryptSigned(body), hmac: true }; }
-    catch (e) { /* fall through to plain AES */ }
+    catch (e) { /* fall through */ }
   }
   // Try plain AES (old module)
   try { return { data: aesDecrypt(body), hmac: false }; }
+  catch (e) { /* fall through */ }
+  // If it's valid JSON, it's a plaintext request (no encryption)
+  try { JSON.parse(body); return { data: body, hmac: false }; }
   catch (e) { return null; }
 }
 
@@ -260,7 +263,12 @@ app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
   }
   const fk = licenseKey || "PINTU";
   let kd = store.getKey(fk);
-  function encResp(obj) { return useHmac ? aesEncryptSigned(JSON.stringify(obj)) : aesEncrypt(JSON.stringify(obj)); }
+  function encResp(obj) {
+    const json = JSON.stringify(obj);
+    if (useHmac) return aesEncryptSigned(json);
+    // Plain AES or plaintext — send as-is (client-side encrypt/decrypt is no-op for testing)
+    return json;
+  }
   function errResp(msg,st) { return res.type("text/plain").send(encResp({success:false,status:st||"error",message:msg})); }
   if (!kd) return errResp("License key not found","not_found");
   if (kd.isBlocked) return errResp("License key is blocked","blocked");
