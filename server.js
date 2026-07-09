@@ -5,13 +5,24 @@ const fs = require("fs");
 const path = require("path");
 
 const AES_KEY = Buffer.from("ycb_floating_menu_key_256_bits_!", "utf8");
-const AES_IV = Buffer.alloc(16, 0);
 
 function aesEncrypt(plaintext) {
-  const cipher = crypto.createCipheriv("aes-256-cbc", AES_KEY, AES_IV);
-  let encrypted = cipher.update(plaintext, "utf8", "base64");
-  encrypted += cipher.final("base64");
-  return encrypted;
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv("aes-256-cbc", AES_KEY, iv);
+  let encrypted = cipher.update(plaintext, "utf8");
+  encrypted = Buffer.concat([encrypted, cipher.final()]);
+  return Buffer.concat([iv, encrypted]).toString("base64");
+}
+
+function aesDecrypt(b64text) {
+  const raw = Buffer.from(b64text, "base64");
+  if (raw.length < 17) throw new Error("Ciphertext too short");
+  const iv = raw.subarray(0, 16);
+  const ct = raw.subarray(16);
+  const decipher = crypto.createDecipheriv("aes-256-cbc", AES_KEY, iv);
+  let decrypted = decipher.update(ct);
+  decrypted = Buffer.concat([decrypted, decipher.final()]);
+  return decrypted.toString("utf8");
 }
 
 const app = express();
@@ -23,6 +34,7 @@ const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString("he
 const MONGODB_URI = process.env.MONGODB_URI || "";
 
 app.use(cors({ origin: false }));
+app.use(express.text({ type: "text/plain" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -148,23 +160,40 @@ function requireAuth(req,res,next) {
 
 // ====== LICENSE VALIDATION ======
 app.all(["/c","/api/c","/api/verify-license"], (req, res) => {
-  const k = req.query.key||req.query.licenseKey||req.body?.key||req.body?.licenseKey;
-  const d = req.query.deviceId||req.body?.deviceId||req.body?.device;
-  const fk = k||"PINTU";
+  // Try to decrypt body (POST from client with encrypted payload, text/plain)
+  let licenseKey = null;
+  let deviceId = null;
+  if (req.body && typeof req.body === "string" && req.body.length > 20) {
+    try {
+      const decrypted = aesDecrypt(req.body);
+      const parsed = JSON.parse(decrypted);
+      licenseKey = parsed.licenseKey || parsed.key || null;
+      deviceId = parsed.deviceId || parsed.device || deviceId;
+    } catch (_) {}
+  }
+  // Fallback to query params (GET) or JSON body (admin tools)
+  if (!licenseKey) {
+    licenseKey = req.query.key || req.query.licenseKey
+      || (typeof req.body === "object" && req.body ? (req.body.key || req.body.licenseKey) : null);
+    deviceId = req.query.deviceId
+      || (typeof req.body === "object" && req.body ? (req.body.deviceId || req.body.device) : null)
+      || deviceId;
+  }
+  const fk = licenseKey || "PINTU";
   let kd = store.getKey(fk);
   function errResp(msg,st) { return res.type("text/plain").send(aesEncrypt(JSON.stringify({success:false,status:st||"error",message:msg}))); }
   if (!kd) return errResp("License key not found","not_found");
   if (kd.isBlocked) return errResp("License key is blocked","blocked");
   if (Date.now()>kd.expiresAt) return errResp("License key has expired","expired");
-  if (d) {
-    if (!kd.deviceId) store.updateDevice(fk,d);
-    else if (kd.deviceId !== d) return errResp("Key already in use on another device","device_mismatch");
+  if (deviceId) {
+    if (!kd.deviceId) store.updateDevice(fk, deviceId);
+    else if (kd.deviceId !== deviceId) return errResp("Key already in use on another device","device_mismatch");
   }
 
   // Build response with color and SIM settings
   const resp = {
     success: true, status: "active", licenseKey: fk,
-    deviceId: kd.deviceId||d||"unbound",
+    deviceId: kd.deviceId || deviceId || "unbound",
     expiresAt: new Date(kd.expiresAt).toISOString(),
     validationTimestamp: new Date().toISOString(),
     color: kd.color||"red",
